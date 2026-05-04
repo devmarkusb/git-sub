@@ -25,7 +25,7 @@ git-sub --help
 That companion tool looks for a richer `git-sub` in this order:
 
 1. **`GIT_SUB`** — absolute path to this `git-sub` file (or any executable you prefer).
-2. **`git-sub` on your PATH** — e.g. both scripts copied into `~/bin`.
+2. **`git-sub` on your PATH** — e.g. both scripts copied or linked into `~/bin`.
 3. **Sibling checkout** — clone this repo next to `git-worktree` so you have:
    - `…/git-worktree/git-worktree`
    - `…/git-sub/git-sub`  

@@ -2,7 +2,6 @@
 """
 Initialize submodules and, when the repo uses Git LFS, run git lfs pull.
 
-Portable replacement for the old bash git-sub (no bash on Windows).
 Does not auto-install git-lfs with sudo/brew; see --help / README.
 """
 
