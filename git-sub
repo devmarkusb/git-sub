@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+Initialize submodules and, when the repo uses Git LFS, run git lfs pull.
+
+Portable replacement for the old bash git-sub (no bash on Windows).
+Does not auto-install git-lfs with sudo/brew; see --help / README.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+PROG = "git-sub"
+
+HELP = f"""{PROG} — submodule init + optional Git LFS pull
+
+Runs in the current directory (typically a fresh worktree):
+
+  1. git submodule update --init --recursive [--recommend-shallow when supported]
+  2. If .gitattributes (anywhere) uses filter=lfs, runs git lfs install (local)
+     and git lfs pull when git-lfs is on PATH.
+
+Install git-lfs yourself if needed (Windows: install Git LFS from the official
+installer; macOS: brew install git-lfs; Linux: your package manager).
+
+Usage: {PROG} [--help]
+"""
+
+
+def run_git_tty(args: list[str], *, cwd: Path | None = None, check: bool = True) -> None:
+    r = subprocess.run(["git", *args], cwd=cwd)
+    if check and r.returncode != 0:
+        raise SystemExit(r.returncode)
+
+
+def inside_work_tree(cwd: Path) -> bool:
+    r = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    return r.returncode == 0 and r.stdout.strip() == "true"
+
+
+def submodule_update(cwd: Path) -> None:
+    r = subprocess.run(
+        ["git", "submodule", "update", "--init", "--recursive", "--recommend-shallow"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode == 0:
+        return
+    err = ((r.stderr or "") + (r.stdout or "")).lower()
+    if "unknown option" in err or "recommend-shallow" in err:
+        run_git_tty(["submodule", "update", "--init", "--recursive"], cwd=cwd, check=True)
+        return
+    print(r.stderr or r.stdout or f"git submodule failed ({r.returncode})", file=sys.stderr)
+    raise SystemExit(r.returncode)
+
+
+def repo_uses_lfs(cwd: Path) -> bool:
+    r = subprocess.run(
+        ["git", "grep", "-q", "filter=lfs"],
+        cwd=cwd,
+        capture_output=True,
+    )
+    return r.returncode == 0
+
+
+def ensure_git_lfs(cwd: Path) -> None:
+    if shutil.which("git-lfs"):
+        return
+    plat = sys.platform
+    print("Git LFS is required by this repository but git-lfs was not found on PATH.", file=sys.stderr)
+    if plat == "win32":
+        print(
+            "Install: https://git-lfs.com — or winget install GitHub.git-lfs",
+            file=sys.stderr,
+        )
+    elif plat == "darwin":
+        print("Install: brew install git-lfs", file=sys.stderr)
+    else:
+        print("Install: e.g. sudo apt-get install git-lfs (or your distro package).", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def lfs_setup(cwd: Path) -> None:
+    ensure_git_lfs(cwd)
+    run_git_tty(["lfs", "install", "--local"], cwd=cwd, check=True)
+    run_git_tty(["lfs", "pull"], cwd=cwd, check=True)
+
+
+def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(HELP)
+        return 0
+
+    cwd = Path.cwd()
+
+    submodule_update(cwd)
+
+    if not inside_work_tree(cwd):
+        return 0
+
+    if not repo_uses_lfs(cwd):
+        return 0
+
+    print("Git LFS required by repository.")
+    lfs_setup(cwd)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
