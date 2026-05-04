@@ -1,6 +1,6 @@
 # git-sub
 
-**Submodule init + Git LFS pull in one step** — plain Python 3, no Bash. Same `git` and `git-lfs` you already use on **macOS, Linux, and Windows** (Git for Windows).
+**Submodule init + Git LFS pull in one step** — plain Python 3. Same `git` and `git-lfs` you already use on **macOS, Linux, and Windows** (Git for Windows).
 
 ## What it does
 
@@ -18,9 +18,11 @@ git-sub
 git-sub --help
 ```
 
-## Use with git-worktree
+## Companion: [git-worktree](https://github.com/devmarkusb/git-worktree)
 
-That tool looks for a richer `git-sub` in this order:
+> **Separate project.** The section below is only for people who also use **[git-worktree](https://github.com/devmarkusb/git-worktree)** (worktree add/remove + optional `git-sub`). You can ignore it if you only run `git-sub` by hand.
+
+That companion tool looks for a richer `git-sub` in this order:
 
 1. **`GIT_SUB`** — absolute path to this `git-sub` file (or any executable you prefer).
 2. **`git-sub` on your PATH** — e.g. both scripts copied into `~/bin`.
@@ -30,14 +32,14 @@ That tool looks for a richer `git-sub` in this order:
    Same parent folder, fixed names — **no extra config**.
 4. If none of the above match, `git-worktree` falls back to a minimal built-in submodule-only step.
 
-So the low-friction layout is:
+Low-friction layout if you use both:
 
 ```text
-~/src/git-worktree/   # clone of git-worktree repo
-~/src/git-sub/        # clone of git-sub repo
+~/src/git-worktree/   # https://github.com/devmarkusb/git-worktree
+~/src/git-sub/        # this repo
 ```
 
-Keep using `~/src/git-worktree/git-worktree` (or add that directory to PATH and run the script by name). No pip, no global install required.
+Run `git-worktree` from the first checkout (or symlink it onto your `PATH`). No pip, no global install required.
 
 ## Requirements
 
