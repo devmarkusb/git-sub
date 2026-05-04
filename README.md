@@ -1,5 +1,10 @@
 # git-sub
 
+[![CI](https://github.com/devmarkusb/git-sub/actions/workflows/ci.yml/badge.svg)](https://github.com/devmarkusb/git-sub/actions/workflows/ci.yml)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 **Submodule init + Git LFS pull in one step** — plain Python 3. Same `git` and `git-lfs` you already use on **macOS, Linux, and Windows** (Git for Windows).
 
 ## What it does
@@ -46,6 +51,18 @@ Run `git-worktree` from the first checkout (or symlink it onto your `PATH`). No 
 - Python 3.8+
 - `git` on PATH
 - `git-lfs` on PATH **only** when the repository actually uses LFS
+
+## Development
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+ruff check git-sub tests
+pytest
+```
+
+CI runs the same checks on Ubuntu, macOS, and Windows (Python 3.8 and 3.12).
 
 ## License
 
