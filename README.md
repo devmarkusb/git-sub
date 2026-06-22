@@ -65,7 +65,8 @@ python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 python3 tools/format_markdown.py README.md
-ruff check git-sub tests
+python3 tools/format_markdown.py --check --tracked
+ruff check git-sub tests tools/format_markdown.py
 pytest
 ```
 

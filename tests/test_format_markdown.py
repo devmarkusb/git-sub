@@ -69,3 +69,22 @@ def test_preserves_indented_list_continuation_lines():
     )
 
     assert fm.format_text(source, width=30) == source
+
+
+def test_check_files_reports_unformatted_file(tmp_path: Path, capsys):
+    fm = load_format_markdown()
+    source = "This is a long Markdown paragraph that should be wrapped without changing words.\n"
+    path = tmp_path / "README.md"
+    path.write_text(source)
+
+    assert fm.check_files([path], width=40) == 1
+    assert path.read_text() == source
+    assert "Markdown formatting needed" in capsys.readouterr().err
+
+
+def test_check_files_accepts_formatted_file(tmp_path: Path):
+    fm = load_format_markdown()
+    path = tmp_path / "README.md"
+    path.write_text("Already short.\n")
+
+    assert fm.check_files([path], width=40) == 0

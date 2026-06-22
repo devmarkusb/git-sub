@@ -134,9 +134,19 @@ def format_file(path: Path, *, width: int = DEFAULT_WIDTH) -> bool:
     return True
 
 
+def needs_formatting(path: Path, *, width: int = DEFAULT_WIDTH) -> bool:
+    original = path.read_text(encoding="utf-8")
+    return format_text(original, width=width) != original
+
+
 def git_lines(args: list[str]) -> list[str]:
     result = subprocess.run(["git", *args], check=True, capture_output=True, text=True)
     return [line for line in result.stdout.splitlines() if line]
+
+
+def tracked_markdown_files() -> list[Path]:
+    names = git_lines(["ls-files", "--", "*.md", "*.markdown"])
+    return [Path(name) for name in names]
 
 
 def staged_markdown_files() -> list[Path]:
@@ -149,6 +159,25 @@ def staged_markdown_files() -> list[Path]:
 def has_unstaged_changes(path: Path) -> bool:
     result = subprocess.run(["git", "diff", "--quiet", "--", str(path)])
     return result.returncode != 0
+
+
+def check_files(paths: list[Path], *, width: int) -> int:
+    unformatted = [path for path in paths if path.is_file() and needs_formatting(path, width=width)]
+    if not unformatted:
+        return 0
+
+    print("Markdown formatting needed:", file=sys.stderr)
+    for path in unformatted:
+        print(f"  {path}", file=sys.stderr)
+    print("Run: python3 tools/format_markdown.py <file> [...]", file=sys.stderr)
+    return 1
+
+
+def format_files(paths: list[Path], *, width: int) -> int:
+    for path in paths:
+        if path.is_file():
+            format_file(path, width=width)
+    return 0
 
 
 def format_staged_files(*, width: int) -> int:
@@ -173,26 +202,32 @@ def format_staged_files(*, width: int) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", type=Path)
+    parser.add_argument(
+        "--check", action="store_true", help="fail if Markdown files need formatting"
+    )
     parser.add_argument("--staged", action="store_true", help="format staged Markdown files")
+    parser.add_argument("--tracked", action="store_true", help="use all tracked Markdown files")
     parser.add_argument("--width", type=int, default=DEFAULT_WIDTH)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
-    if args.staged:
-        if args.paths:
-            print("--staged cannot be combined with explicit paths", file=sys.stderr)
-            return 2
-        return format_staged_files(width=args.width)
-
-    if not args.paths:
-        print("No Markdown files supplied.", file=sys.stderr)
+    target_count = sum((args.staged, args.tracked, bool(args.paths)))
+    if target_count != 1:
+        print("Choose exactly one of --staged, --tracked, or explicit paths.", file=sys.stderr)
         return 2
 
-    for path in args.paths:
-        format_file(path, width=args.width)
-    return 0
+    if args.staged:
+        if args.check:
+            return check_files(staged_markdown_files(), width=args.width)
+        return format_staged_files(width=args.width)
+
+    paths = tracked_markdown_files() if args.tracked else args.paths
+    if args.check:
+        return check_files(paths, width=args.width)
+
+    return format_files(paths, width=args.width)
 
 
 if __name__ == "__main__":
