@@ -5,14 +5,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**Submodule init + Git LFS pull in one step** — plain Python 3. Same `git` and `git-lfs` you already use on **macOS, Linux, and Windows** (Git for Windows).
+**Submodule init + Git LFS pull in one step** — plain Python 3. Same `git` and `git-lfs` you already use on **macOS,
+Linux, and Windows** (Git for Windows).
 
 ## What it does
 
 1. `git submodule update --init --recursive` (uses `--recommend-shallow` when your Git supports it).
-2. If the repo uses **Git LFS** (`filter=lfs` in tracked `.gitattributes`), runs `git lfs install --local` and `git lfs pull`.
+2. If the repo uses **Git LFS** (`filter=lfs` in tracked `.gitattributes`), runs `git lfs install --local` and `git lfs
+   pull`.
 
-It does **not** install `git-lfs` for you (no `sudo` / Homebrew automation). Install LFS once per machine; see [git-lfs.com](https://git-lfs.com).
+It does **not** install `git-lfs` for you (no `sudo` / Homebrew automation). Install LFS once per machine; see
+[git-lfs.com](https://git-lfs.com).
 
 ## Usage
 
@@ -25,7 +28,9 @@ git-sub --help
 
 ## Companion: [git-worktree](https://github.com/devmarkusb/git-worktree)
 
-> **Separate project.** The section below is only for people who also use **[git-worktree](https://github.com/devmarkusb/git-worktree)** (worktree add/remove + optional `git-sub`). You can ignore it if you only run `git-sub` by hand.
+> **Separate project.** The section below is only for people who also use
+> **[git-worktree](https://github.com/devmarkusb/git-worktree)** (worktree add/remove + optional `git-sub`). You can
+> ignore it if you only run `git-sub` by hand.
 
 That companion tool looks for a richer `git-sub` in this order:
 
@@ -33,7 +38,7 @@ That companion tool looks for a richer `git-sub` in this order:
 2. **`git-sub` on your PATH** — e.g. both scripts copied or linked into `~/bin`.
 3. **Sibling checkout** — clone this repo next to `git-worktree` so you have:
    - `…/git-worktree/git-worktree`
-   - `…/git-sub/git-sub`  
+   - `…/git-sub/git-sub`
    Same parent folder, fixed names — **no extra config**.
 4. If none of the above match, `git-worktree` falls back to a minimal built-in submodule-only step.
 
@@ -55,12 +60,16 @@ Run `git-worktree` from the first checkout (or symlink it onto your `PATH`). No 
 ## Development
 
 ```bash
+git config core.hooksPath .githooks
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
+python3 tools/format_markdown.py README.md
 ruff check git-sub tests
 pytest
 ```
+
+The hook formats staged Markdown files to 120 columns before each commit and re-stages files it changes.
 
 CI runs the same checks on Ubuntu, macOS, and Windows (Python 3.8 and 3.12).
 
