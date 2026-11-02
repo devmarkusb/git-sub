@@ -10,9 +10,12 @@ Linux, and Windows** (Git for Windows).
 
 ## What it does
 
-1. `git submodule update --init --recursive` (uses `--recommend-shallow` when your Git supports it).
-2. If the repo uses **Git LFS** (`filter=lfs` in tracked `.gitattributes`), runs `git lfs install --local` and `git lfs
+1. `git submodule sync --recursive` to align registered submodule URLs with `.gitmodules`.
+2. `git submodule update --init --recursive` (uses `--recommend-shallow` when your Git supports it).
+3. If the repo uses **Git LFS** (`filter=lfs` in tracked `.gitattributes`), runs `git lfs install --local` and `git lfs
    pull`.
+
+URL sync makes `.gitmodules` authoritative and resets per-checkout submodule URL overrides.
 
 It does **not** install `git-lfs` for you (no `sudo` / Homebrew automation). Install LFS once per machine; see
 [git-lfs.com](https://git-lfs.com).

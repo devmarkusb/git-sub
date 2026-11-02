@@ -18,9 +18,12 @@ HELP = f"""{PROG} — submodule init + optional Git LFS pull
 
 Runs in the current directory (typically a fresh worktree):
 
-  1. git submodule update --init --recursive [--recommend-shallow when supported]
-  2. If .gitattributes (anywhere) uses filter=lfs, runs git lfs install (local)
+  1. git submodule sync --recursive (align registered URLs with .gitmodules)
+  2. git submodule update --init --recursive [--recommend-shallow when supported]
+  3. If .gitattributes (anywhere) uses filter=lfs, runs git lfs install (local)
      and git lfs pull when git-lfs is on PATH.
+
+URL sync replaces per-checkout submodule URL overrides with .gitmodules values.
 
 Install git-lfs yourself if needed (Windows: install Git LFS from the official
 installer; macOS: brew install git-lfs; Linux: your package manager).
@@ -46,6 +49,9 @@ def inside_work_tree(cwd: Path) -> bool:
 
 
 def submodule_update(cwd: Path) -> None:
+    if (cwd / ".gitmodules").is_file():
+        run_git_tty(["submodule", "sync", "--recursive"], cwd=cwd, check=True)
+
     r = subprocess.run(
         ["git", "submodule", "update", "--init", "--recursive", "--recommend-shallow"],
         cwd=cwd,

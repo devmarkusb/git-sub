@@ -2,8 +2,9 @@
 
 ## Project overview
 
-`git-sub` is a Python 3.8+ command-line script that initializes recursive Git submodules and, when tracked files use Git
-LFS, configures local LFS and pulls its content. The executable is the extensionless `git-sub` file.
+`git-sub` is a Python 3.8+ command-line script that syncs registered submodule URLs from `.gitmodules`, initializes
+recursive Git submodules and, when tracked files use Git LFS, configures local LFS and pulls its content. The executable
+is the extensionless `git-sub` file.
 
 ## Build commands
 
@@ -50,8 +51,9 @@ LFS, configures local LFS and pulls its content. The executable is the extension
 
 ## Security and privacy constraints
 
-- Running `git-sub` changes the current checkout: it updates recursive submodules and can download Git LFS content.
-  Run it only when requested and in the intended repository.
+- Running `git-sub` changes the current checkout: it resets registered submodule URL overrides to `.gitmodules`,
+  updates recursive submodules, and can download Git LFS content. Run it only when requested and in the intended
+  repository.
 - Do not add automatic Git LFS installation, privilege escalation, or shell-based subprocess execution. The tool must
   continue to rely on Git and Git LFS already available on `PATH`.
 - Never push, force-push, or use an equivalent publishing flow (including `gh` or IDE sync) without explicit user
