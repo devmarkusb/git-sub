@@ -75,6 +75,10 @@ Run `git-worktree` from the first checkout (or symlink it onto your `PATH`). No 
 
 Development tooling requires Python 3.10+; running the standalone `git-sub` script still requires only Python 3.8+.
 
+Run this setup from the root of the `git-sub` checkout. If it is a Git submodule, enter its directory first:
+`pre-commit install` installs hooks in the current repository. A parent repository does not use the submodule's hook
+configuration.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
