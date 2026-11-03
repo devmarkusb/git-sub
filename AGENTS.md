@@ -9,26 +9,32 @@ is the extensionless `git-sub` file.
 ## Build commands
 
 - No package build command is defined or used by CI.
+- Development tooling requires Python 3.10+; the `git-sub` runtime remains Python 3.8+.
 - Development setup: `python3 -m venv .venv`; activate with `source .venv/bin/activate` (Windows:
   `.venv\Scripts\activate`), then run `pip install -e ".[dev]"`.
-- README hook setup: `git config core.hooksPath .githooks`.
+- Hook setup: `pre-commit install`. For an existing `.githooks` setup, first remove its local override with
+  `git config --local --unset-all core.hooksPath`.
 
 ## Test commands
 
-- CI test command: `pytest -q tests/`.
-- `pytest` is also documented for local development.
+- Full development test command: `pytest -q tests/`.
+- Python 3.8 runtime-only setup: `pip install -e ".[test]"`, then `pytest -q tests/test_gitsub.py`.
+- CI runs runtime tests on Python 3.8 and 3.12; tooling checks run on 3.12.
 
 ## Formatting and linting
 
-- Markdown check: `python tools/format_markdown.py --check --tracked`.
-- Ruff: `ruff check git-sub tests tools/format_markdown.py`.
-- The pre-commit hook formats staged Markdown and re-stages formatter changes. It refuses partially staged Markdown.
+- Markdown formatting/check: `pre-commit run mdformat --all-files --show-diff-on-failure`.
+- Markdown policy is in `.mdformat.toml`; formatter versions are pinned in `.pre-commit-config.yaml`.
+- Ruff: `ruff check git-sub tests`.
+- The standard pre-commit hook automatically formats staged Markdown and temporarily saves unstaged changes. When it
+  edits files, review and stage the result, then retry the commit.
 
 ## Architecture and important directories
 
 - `git-sub`: CLI implementation; subprocess calls invoke Git and Git LFS.
 - `tests/`: pytest unit tests; subprocess interactions are mocked.
-- `tools/format_markdown.py`: Markdown formatter used by CI and `.githooks/pre-commit`.
+- `.pre-commit-config.yaml`: official mdformat hook with GFM support; pre-commit manages file selection and hook
+  environments. Keep Markdown parsing and hook execution in the upstream tools.
 - `.github/workflows/ci.yml`: CI matrix for Ubuntu, macOS, and Windows with Python 3.8 and 3.12.
 
 ## Coding conventions
@@ -51,9 +57,8 @@ is the extensionless `git-sub` file.
 
 ## Security and privacy constraints
 
-- Running `git-sub` changes the current checkout: it resets registered submodule URL overrides to `.gitmodules`,
-  updates recursive submodules, and can download Git LFS content. Run it only when requested and in the intended
-  repository.
+- Running `git-sub` changes the current checkout: it resets registered submodule URL overrides to `.gitmodules`, updates
+  recursive submodules, and can download Git LFS content. Run it only when requested and in the intended repository.
 - Do not add automatic Git LFS installation, privilege escalation, or shell-based subprocess execution. The tool must
   continue to rely on Git and Git LFS already available on `PATH`.
 - Never push, force-push, or use an equivalent publishing flow (including `gh` or IDE sync) without explicit user

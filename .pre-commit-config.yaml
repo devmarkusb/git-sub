@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        args: ["--"]
+        additional_dependencies:
+          - mdformat-gfm==1.0.0

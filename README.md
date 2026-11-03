@@ -12,10 +12,14 @@ Linux, and Windows** (Git for Windows).
 
 1. `git submodule sync --recursive` to align registered submodule URLs with `.gitmodules`.
 2. `git submodule update --init --recursive` (uses `--recommend-shallow` when your Git supports it).
-3. If the repo uses **Git LFS** (`filter=lfs` in tracked `.gitattributes`), runs `git lfs install --local` and `git lfs
-   pull`.
+3. If the repo uses **Git LFS** (`filter=lfs` in tracked `.gitattributes`), runs `git lfs install --local` and
+   `git lfs pull`.
 
-URL sync makes `.gitmodules` authoritative and resets per-checkout submodule URL overrides.
+LFS setup and pull apply to the invoked repository; `git-sub` does not run them separately inside submodules.
+
+URL sync makes `.gitmodules` authoritative and resets per-checkout submodule URL overrides. It runs again after a
+successful update to pick up newly checked-out nested `.gitmodules` files. If a nested URL change causes the update
+itself to fail, another invocation may be needed; failed updates are not automatically retried.
 
 It does **not** install `git-lfs` for you (no `sudo` / Homebrew automation). Install LFS once per machine; see
 [git-lfs.com](https://git-lfs.com).
@@ -29,6 +33,8 @@ git-sub
 git-sub --help
 ```
 
+Commands operate on that repository's root, including when invoked from a subdirectory.
+
 ## Companion: [git-worktree](https://github.com/devmarkusb/git-worktree)
 
 > **Separate project.** The section below is only for people who also use
@@ -38,11 +44,16 @@ git-sub --help
 That companion tool looks for a richer `git-sub` in this order:
 
 1. **`GIT_SUB`** — absolute path to this `git-sub` file (or any executable you prefer).
+
 2. **`git-sub` on your PATH** — e.g. both scripts copied or linked into `~/bin`.
+
 3. **Sibling checkout** — clone this repo next to `git-worktree` so you have:
+
    - `…/git-worktree/git-worktree`
    - `…/git-sub/git-sub`
+
    Same parent folder, fixed names — **no extra config**.
+
 4. If none of the above match, `git-worktree` falls back to a minimal built-in submodule-only step.
 
 Low-friction layout if you use both:
@@ -62,20 +73,29 @@ Run `git-worktree` from the first checkout (or symlink it onto your `PATH`). No 
 
 ## Development
 
+Development tooling requires Python 3.10+; running the standalone `git-sub` script still requires only Python 3.8+.
+
 ```bash
-git config core.hooksPath .githooks
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-python3 tools/format_markdown.py README.md
-python3 tools/format_markdown.py --check --tracked
-ruff check git-sub tests tools/format_markdown.py
+pre-commit install
+pre-commit run mdformat --all-files
+ruff check git-sub tests
 pytest
 ```
 
-The hook formats staged Markdown files to 120 columns before each commit and re-stages files it changes.
+If you previously enabled `.githooks`, run `git config --local --unset-all core.hooksPath` before `pre-commit install`.
 
-CI runs the same checks on Ubuntu, macOS, and Windows (Python 3.8 and 3.12).
+The standard pre-commit hook automatically formats staged Markdown with mdformat and GitHub Flavored Markdown support.
+It uses 120-column prose wrapping and the policy in `.mdformat.toml`; formatter versions are pinned in
+`.pre-commit-config.yaml`. Pre-commit manages its own formatter environment and temporarily saves unstaged changes while
+running. When formatting changes a file, the commit pauses: review and stage the formatted result, then retry the
+commit. To format a specific file, run `pre-commit run mdformat --files README.md`.
+
+CI runs runtime tests on Ubuntu, macOS, and Windows with Python 3.8 and 3.12. The Markdown hook and Ruff run on Python
+3.12. For runtime-only testing with Python 3.8, install `pip install -e ".[test]"` and run
+`pytest -q tests/test_gitsub.py`.
 
 ## License
 

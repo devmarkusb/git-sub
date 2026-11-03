@@ -1,0 +1,6 @@
+wrap = 120
+number = true
+end_of_line = "keep"
+extensions = ["gfm"]
+codeformatters = []
+validate = true

@@ -7,6 +7,8 @@ Does not auto-install git-lfs with sudo/brew; see --help / README.
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,12 +18,14 @@ PROG = "git-sub"
 
 HELP = f"""{PROG} — submodule init + optional Git LFS pull
 
-Runs in the current directory (typically a fresh worktree):
+Runs at the root of the current repository (typically a fresh worktree):
 
   1. git submodule sync --recursive (align registered URLs with .gitmodules)
   2. git submodule update --init --recursive [--recommend-shallow when supported]
-  3. If .gitattributes (anywhere) uses filter=lfs, runs git lfs install (local)
-     and git lfs pull when git-lfs is on PATH.
+  3. If tracked .gitattributes in this repository uses filter=lfs, runs
+     git lfs install (local) and git lfs pull when git-lfs is on PATH.
+
+LFS setup and pull do not run separately inside submodules.
 
 URL sync replaces per-checkout submodule URL overrides with .gitmodules values.
 
@@ -48,10 +52,29 @@ def inside_work_tree(cwd: Path) -> bool:
     return r.returncode == 0 and r.stdout.strip() == "true"
 
 
+def work_tree_root(cwd: Path) -> Path:
+    r = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=cwd, capture_output=True,
+    )
+    if r.returncode != 0:
+        print(os.fsdecode(r.stderr or r.stdout) or "Unable to locate the Git worktree.", file=sys.stderr)
+        raise SystemExit(r.returncode)
+    # Remove only Git's terminator; a directory name itself may end in a newline.
+    root = r.stdout[:-1] if r.stdout.endswith(b"\n") else r.stdout
+    return Path(os.fsdecode(root))
+
+
 def submodule_update(cwd: Path) -> None:
-    if (cwd / ".gitmodules").is_file():
+    has_submodules = (cwd / ".gitmodules").is_file()
+    if has_submodules:
+        run_git_tty(["submodule", "sync", "--recursive"], cwd=cwd, check=True)
+    _submodule_update_once(cwd)
+    if has_submodules:
+        # Checkout may have changed nested .gitmodules since the initial sync.
         run_git_tty(["submodule", "sync", "--recursive"], cwd=cwd, check=True)
 
+
+def _submodule_update_once(cwd: Path) -> None:
     r = subprocess.run(
         ["git", "submodule", "update", "--init", "--recursive", "--recommend-shallow"],
         cwd=cwd,
@@ -61,7 +84,13 @@ def submodule_update(cwd: Path) -> None:
     if r.returncode == 0:
         return
     err = ((r.stderr or "") + (r.stdout or "")).lower()
-    if "unknown option" in err or "recommend-shallow" in err:
+    unsupported_shallow = (
+        re.search(r"(?:unknown|unrecognized|unsupported) (?:option|switch)[^\n]*recommend-shallow", err)
+        or re.search(r"recommend-shallow[^\n]*(?:not supported|unsupported)", err)
+        # Older shell-based versions of git-submodule report only usage for an unknown flag.
+        or (r.returncode in (1, 129) and err.lstrip().startswith("usage: git submodule"))
+    )
+    if unsupported_shallow:
         run_git_tty(["submodule", "update", "--init", "--recursive"], cwd=cwd, check=True)
         return
     print(r.stderr or r.stdout or f"git submodule failed ({r.returncode})", file=sys.stderr)
@@ -69,11 +98,21 @@ def submodule_update(cwd: Path) -> None:
 
 
 def repo_uses_lfs(cwd: Path) -> bool:
+    # Match an attribute declaration, including C-quoted patterns, rather than
+    # comments, other filter names, or documentation that happens to mention LFS.
+    pattern = (
+        r'^[[:space:]]*("(\\.|[^"\\])*"|[^#"[:space:]][^[:space:]]*)[[:space:]]+'
+        r'([^[:space:]]+[[:space:]]+)*filter=lfs([[:space:]]|$)'
+    )
     r = subprocess.run(
-        ["git", "grep", "-q", "filter=lfs"],
+        ["git", "grep", "-q", "-E", pattern, "--", ":(top).gitattributes", ":(top)**/.gitattributes"],
         cwd=cwd,
         capture_output=True,
+        text=True,
     )
+    if r.returncode not in (0, 1):
+        print(r.stderr or r.stdout or f"git grep failed ({r.returncode})", file=sys.stderr)
+        raise SystemExit(r.returncode)
     return r.returncode == 0
 
 
@@ -101,16 +140,17 @@ def lfs_setup(cwd: Path) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+    args = sys.argv[1:]
+    if args in (["-h"], ["--help"]):
         print(HELP)
         return 0
+    if args:
+        print(f"Unrecognized arguments: {' '.join(args)}\nUsage: {PROG} [--help]", file=sys.stderr)
+        return 2
 
-    cwd = Path.cwd()
+    cwd = work_tree_root(Path.cwd())
 
     submodule_update(cwd)
-
-    if not inside_work_tree(cwd):
-        return 0
 
     if not repo_uses_lfs(cwd):
         return 0

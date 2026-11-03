@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -161,7 +162,7 @@ def test_main_no_lfs_early_exit(gitsub, monkeypatch, tmp_path):
     cwd = tmp_path
     monkeypatch.chdir(cwd)
     with patch.object(gitsub, "submodule_update") as su:
-        with patch.object(gitsub, "inside_work_tree", return_value=True):
+        with patch.object(gitsub, "work_tree_root", return_value=cwd):
             with patch.object(gitsub, "repo_uses_lfs", return_value=False):
                 assert gitsub.main() == 0
     su.assert_called_once_with(cwd)
@@ -172,19 +173,156 @@ def test_main_lfs_path(gitsub, monkeypatch, tmp_path):
     cwd = tmp_path
     monkeypatch.chdir(cwd)
     with patch.object(gitsub, "submodule_update"):
-        with patch.object(gitsub, "inside_work_tree", return_value=True):
+        with patch.object(gitsub, "work_tree_root", return_value=cwd):
             with patch.object(gitsub, "repo_uses_lfs", return_value=True):
                 with patch.object(gitsub, "lfs_setup") as lfs:
                     assert gitsub.main() == 0
     lfs.assert_called_once_with(cwd)
 
 
-def test_main_not_in_work_tree_skips_lfs(gitsub, monkeypatch, tmp_path):
+def test_main_not_in_work_tree_fails_before_modifying_checkout(gitsub, monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "argv", ["git-sub"])
-    cwd = tmp_path
-    monkeypatch.chdir(cwd)
-    with patch.object(gitsub, "submodule_update"):
-        with patch.object(gitsub, "inside_work_tree", return_value=False):
-            with patch.object(gitsub, "repo_uses_lfs") as uses:
-                assert gitsub.main() == 0
-    uses.assert_not_called()
+    monkeypatch.chdir(tmp_path)
+    bad = MagicMock(returncode=128, stdout=b"", stderr=b"fatal: not a git repository")
+    with patch.object(gitsub.subprocess, "run", return_value=bad) as run:
+        with pytest.raises(SystemExit) as exc:
+            gitsub.main()
+    assert exc.value.code == 128
+    run.assert_called_once_with(
+        ["git", "rev-parse", "--show-toplevel"], cwd=tmp_path, capture_output=True,
+    )
+
+
+def test_repo_uses_lfs_only_searches_attribute_declarations(gitsub):
+    cwd = Path("/tmp/repo")
+    with patch.object(gitsub.subprocess, "run", return_value=MagicMock(returncode=1)) as run:
+        assert not gitsub.repo_uses_lfs(cwd)
+    cmd = run.call_args.args[0]
+    assert "--" in cmd
+    assert cmd[cmd.index("--") + 1:] == [":(top).gitattributes", ":(top)**/.gitattributes"]
+    assert "-E" in cmd
+    assert "filter=lfs" not in cmd  # Match an attribute token, not an arbitrary substring.
+
+
+def test_repo_uses_lfs_reports_git_errors(gitsub, capsys):
+    bad = MagicMock(returncode=128, stderr="fatal: unable to read index", stdout="")
+    with patch.object(gitsub.subprocess, "run", return_value=bad):
+        with pytest.raises(SystemExit) as exc:
+            gitsub.repo_uses_lfs(Path("/tmp/repo"))
+    assert exc.value.code == 128
+    assert "unable to read index" in capsys.readouterr().err
+
+
+def test_submodule_sync_precedes_update(gitsub, tmp_path):
+    (tmp_path / ".gitmodules").write_text("[submodule]\n")
+    with patch.object(gitsub.subprocess, "run", return_value=MagicMock(returncode=0)) as run:
+        gitsub.submodule_update(tmp_path)
+    assert [call.args[0][1:3] for call in run.call_args_list] == [
+        ["submodule", "sync"], ["submodule", "update"], ["submodule", "sync"]
+    ]
+
+
+def test_submodule_sync_failure_prevents_update(gitsub, tmp_path):
+    (tmp_path / ".gitmodules").write_text("[submodule]\n")
+    with patch.object(gitsub.subprocess, "run", return_value=MagicMock(returncode=7)) as run:
+        with pytest.raises(SystemExit) as exc:
+            gitsub.submodule_update(tmp_path)
+    assert exc.value.code == 7
+    run.assert_called_once_with(["git", "submodule", "sync", "--recursive"], cwd=tmp_path)
+
+
+def test_submodule_does_not_retry_operational_error_containing_option(gitsub):
+    bad = MagicMock(returncode=128, stderr="fatal: repository '/tmp/recommend-shallow' not found", stdout="")
+    with patch.object(gitsub.subprocess, "run", return_value=bad) as run:
+        with pytest.raises(SystemExit) as exc:
+            gitsub.submodule_update(Path("/tmp/repo"))
+    assert exc.value.code == 128
+    run.assert_called_once()
+
+
+def test_main_rejects_unknown_arguments_before_running_git(gitsub, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["git-sub", "--hlep"])
+    result = MagicMock(returncode=0, stdout="false\n", stderr="")
+    with patch.object(gitsub.subprocess, "run", return_value=result) as run:
+        assert gitsub.main() == 2
+    run.assert_not_called()
+    assert "--hlep" in capsys.readouterr().err
+
+
+def test_main_from_subdirectory_uses_repository_root(gitsub, tmp_path, monkeypatch):
+    root = tmp_path
+    nested = root / "src"
+    nested.mkdir()
+    (root / ".gitmodules").write_text("[submodule]\n")
+    monkeypatch.chdir(nested)
+    monkeypatch.setattr(sys, "argv", ["git-sub"])
+
+    def git_result(cmd, **kwargs):
+        if cmd[1:] == ["rev-parse", "--show-toplevel"]:
+            return MagicMock(returncode=0, stdout=os.fsencode(root) + b"\n", stderr=b"")
+        if cmd[1:] == ["rev-parse", "--is-inside-work-tree"]:
+            return MagicMock(returncode=0, stdout="true\n", stderr="")
+        if cmd[1] == "grep":
+            return MagicMock(returncode=1, stdout="", stderr="")
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch.object(gitsub.subprocess, "run", side_effect=git_result) as run:
+        assert gitsub.main() == 0
+    syncs = [call for call in run.call_args_list if call.args[0][1:3] == ["submodule", "sync"]]
+    assert len(syncs) == 2
+    assert syncs[0].kwargs["cwd"] == root
+    for call in run.call_args_list:
+        if call.args[0][1] in ("submodule", "grep"):
+            assert call.kwargs["cwd"] == root
+
+
+@pytest.mark.parametrize("root", ["/tmp/repo", "/tmp/repo\n", "/tmp/repo\rname"])
+def test_work_tree_root_preserves_directory_name(gitsub, root):
+    with patch.object(gitsub.subprocess, "run", return_value=MagicMock(returncode=0, stdout=os.fsencode(root) + b"\n")):
+        assert gitsub.work_tree_root(Path("/tmp")) == Path(root)
+
+
+def test_submodule_update_falls_back_on_old_git_usage(gitsub):
+    bad = MagicMock(returncode=1, stdout="", stderr="usage: git submodule [--quiet] update [--init]\n")
+    with patch.object(gitsub.subprocess, "run", return_value=bad):
+        with patch.object(gitsub, "run_git_tty") as tty:
+            gitsub.submodule_update(Path("/tmp/repo"))
+    tty.assert_called_once_with(
+        ["submodule", "update", "--init", "--recursive"], cwd=Path("/tmp/repo"), check=True,
+    )
+
+
+def test_lfs_install_failure_prevents_pull(gitsub):
+    with patch.object(gitsub, "ensure_git_lfs"):
+        with patch.object(gitsub.subprocess, "run", return_value=MagicMock(returncode=4)) as run:
+            with pytest.raises(SystemExit) as exc:
+                gitsub.lfs_setup(Path("/tmp/repo"))
+    assert exc.value.code == 4
+    run.assert_called_once_with(["git", "lfs", "install", "--local"], cwd=Path("/tmp/repo"))
+
+
+def test_submodule_update_resyncs_urls_after_successful_checkout(gitsub, tmp_path):
+    (tmp_path / ".gitmodules").write_text("[submodule]\n")
+    with patch.object(gitsub.subprocess, "run", return_value=MagicMock(returncode=0)) as run:
+        gitsub.submodule_update(tmp_path)
+    assert [call.args[0][2] for call in run.call_args_list] == ["sync", "update", "sync"]
+
+
+def test_submodule_update_propagates_post_checkout_sync_failure(gitsub, tmp_path):
+    (tmp_path / ".gitmodules").write_text("[submodule]\n")
+    results = [MagicMock(returncode=0), MagicMock(returncode=0), MagicMock(returncode=9)]
+    with patch.object(gitsub.subprocess, "run", side_effect=results) as run:
+        with pytest.raises(SystemExit) as exc:
+            gitsub.submodule_update(tmp_path)
+    assert exc.value.code == 9
+    assert [call.args[0][2] for call in run.call_args_list] == ["sync", "update", "sync"]
+
+
+def test_submodule_update_preserves_failure_without_repeating_update(gitsub, tmp_path):
+    (tmp_path / ".gitmodules").write_text("[submodule]\n")
+    results = [MagicMock(returncode=0), MagicMock(returncode=7, stdout="", stderr="fatal: update failed")]
+    with patch.object(gitsub.subprocess, "run", side_effect=results) as run:
+        with pytest.raises(SystemExit) as exc:
+            gitsub.submodule_update(tmp_path)
+    assert exc.value.code == 7
+    assert [call.args[0][2] for call in run.call_args_list] == ["sync", "update"]
